@@ -1,0 +1,7 @@
+# Generated CSVs
+*.csv
+
+# dblp data related files
+dblp.xml
+dblp.dtd
+dblpxml.pdf
