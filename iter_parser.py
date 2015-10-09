@@ -4,10 +4,13 @@ Dependencies:
 - lxml 3.4.4
 """
 
+__version__ = "1.1"
+
 from datetime import datetime
+import csv
+import re
 
 from lxml import etree
-import csv
 
 XML_FILE_PATH = "dblp.xml" # Requires dblp.dtd also
 ALL_ELEM = set(["article", "inproceedings", "proceedings", "book",
@@ -40,12 +43,59 @@ def _subelem(elem, sub_elem_names):
     return [elem.find(sub).text if elem.find(sub
             ) is not None else '' for sub in sub_elem_names]
 
+def _count(pages):
+    """
+    Parse pages string and count number of pages.
+    There might be multiple pages sepearted by commas.
+    VALID FORMATS:
+        51         ->Single number
+        23-43      ->Range by two numbers
+    NON-DIGITS ARE ALLOWED BUT IGNORED:
+        AG83-AG120
+        90210H     ->Containing alphabets
+        8e:1-8e:4
+        11:12-21   ->Containing colons
+        P1.35      ->Containing dots
+        S2/109     ->Containing slashs
+        2-3&4      ->Containing ampersands and more...
+    INVALID FORMATS:
+        I-XXI      ->Roman numerals are not recognized
+        0-         ->Incomplete range
+        91A-91A-3  ->More than one dash
+        f          ->No digits
+    ALGORITHM:
+        1) Split the string by comma evaluated each part with (2).
+        2) Split the part to subparts by dash. If more than two subparts,
+           evaluate to zero. If have two subparts, evaluate by (3). If have one
+           subpart, evaluate by (4).
+        3) For both subparts, convert to number by (4). If not sucessful in
+           either subpart, return zero. Subtract first to second, if negative,
+           return zero; else return (second - first + 1) as page count.
+        4) Search for number consisits of digits. Only take the last one
+           (P17.23 -> 23). Return page count as 1 for (2) if find; 0 for (2) if
+           not find. Return the number for (3) if find; -1 for (3) if not find.
+    """
+    cnt = 0
+    reRange = r"([\w\d:]+)-([\w\d:]+)"
+    for part in re.compile(r",").split(pages):
+        subparts = re.compile(r"-").split(part)
+        if len(subparts) > 2:
+            continue
+        else:
+            try:
+                reDigits = re.compile(r"[\d]+")
+                subparts = [int(reDigits.findall(sub)[-1]) for sub in subparts]
+            except IndexError:
+                continue
+            cnt += 1 if len(subparts) == 1 else subparts[1]-subparts[0]+1
+    return "" if cnt == 0 else str(cnt)
+
 def publicationTo(csv_name):
     """
     INCLUDE:
         article|book|incollection|inproceedings
     CSV ROW ITEMS:
-        id(attrib)|title|year(discard row if is not integer)|pages
+        id(attrib)|title|year(discard row if is not integer)|pages|count
     """
     INCLUDE = set(['article', 'book', 'incollection', 'inproceedings'])
     ITEMS = ['title', 'year', 'pages']
@@ -59,6 +109,8 @@ def publicationTo(csv_name):
             except: # year field is not integer or is empty
                 continue
             items = [elem.attrib['key']] + _subelem(elem, ITEMS)
+            # count pages
+            items += [_count(items[-1])]
             writer.writerow(items)
         elif elem.tag not in ALL_ELEM:
             continue
@@ -203,10 +255,10 @@ if __name__ == '__main__':
         emit_log("TIP: Check your XML and DTD files. ")
         exit()
     publicationTo("publication.csv")
-    articleTo("article.csv")
-    inproceedingsTo("inproceedings.csv")
-    bookTo("book.csv")
-    incollectionTo("incollection.csv")
-    authorTo("author.csv")
-    authoredTo("authored.csv")
+    #articleTo("article.csv")
+    #inproceedingsTo("inproceedings.csv")
+    #bookTo("book.csv")
+    #incollectionTo("incollection.csv")
+    #authorTo("author.csv")
+    #authoredTo("authored.csv")
     emit_log("LOG: All tasks finished. ")
